@@ -111,7 +111,7 @@ echo "> Found SSH keypair: $TF_VAR_public_ssh_key_path and $TF_VAR_private_ssh_k
 #else
 #  export TF_VAR_thing_name="${project}_${TF_VAR_user}_${CX_TEAM_NAME}"
 #fi
-export TF_VAR_thing_name="cs-tam-${TF_VAR_user}-$project"
+export TF_VAR_thing_name="cs-${TF_VAR_user}-$project"
 
 if [ ! -z "$CX_TEAM_NAME" ]; then
   export TF_VAR_name_suffix="-$CX_TEAM_NAME"

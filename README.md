@@ -76,6 +76,20 @@ The EKS version is by default set to the latest from AWS (queried via awscli), s
 release a new version while your cluster is running, a successive `make up` will upgrade
 it without prompting, use `make plan` to check first if this is important to you.
 
+## ecs-fargate
+
+Brings up an ECS Fargate cluster and deploys the jpetstore + OpenTelemetry stack via
+CloudFormation (task definition, service, OTEL collector, IAM roles, SSM parameter).
+Uses the default VPC and subnets. Data is sent to Coralogix using `CX_DATA_TOKEN` and
+`CX_DOMAIN` (region is derived from the domain, e.g. eu2.coralogix.com → EU2).
+
+* `make up` - create the ECS cluster and deploy the CloudFormation stack (jpetstore + OTEL)
+* `make destroy` - delete the stack and cluster
+* `make plan` - terraform plan
+* `make workspaces` - list terraform workspaces
+
+Requires `CX_DATA_TOKEN` and optionally `CX_DOMAIN` and `AWS_REGION`. No SSH key needed.
+
 ## postgres
 
 Brings up George Pickers' Tracey Reloaded: https://github.com/georgep1ckers/tracey-reloaded
