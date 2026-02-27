@@ -45,6 +45,11 @@ Parameters:
     Description: The name of the Parameter Store you intend to create and use for the OTEL collector config.
     AllowedPattern: '^([\/]?[a-zA-Z0-9_.-]+)?(\/[a-zA-Z0-9_.-]+){0,14}$'
     MaxLength: 300
+  ResourcePrefix:
+    Type: String
+    Description: Unique prefix for this deployment (e.g. stack name or user). Used for task definition family and log groups so multiple users in the same account do not conflict.
+    AllowedPattern: '^[a-zA-Z0-9_-]+$'
+    MaxLength: 128
 
 Mappings:
   CoralogixRegionMap:
@@ -257,7 +262,7 @@ Resources:
             logs:
               exporters: [coralogix]
               processors: [transform/firelens, resource/metadata, resourcedetection, batch]
-              receivers: [otlp, fluentforward/socket]
+              receivers: [fluentforward/socket]
             metrics:
               exporters: [coralogix]
               processors: [resource/metadata, resourcedetection, batch]
@@ -344,9 +349,7 @@ Resources:
                   - logs:DescribeLogGroups
                   - logs:DescribeLogStreams
                 Resource:
-                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/ecs/jpetstore*"
-                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/ecs/otel-collector*"
-                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/ecs/jpetstore-otel-init*"
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/ecs/${ResourcePrefix}-*"
 
   SSMParameterAccessPolicy:
     Type: AWS::IAM::Policy
@@ -377,7 +380,7 @@ Resources:
   TaskDefinition:
     Type: AWS::ECS::TaskDefinition
     Properties:
-      Family: jpetstore-otel
+      Family: !Sub '${ResourcePrefix}-jpetstore-otel'
       NetworkMode: awsvpc
       RequiresCompatibilities:
         - FARGATE
@@ -400,9 +403,12 @@ Resources:
               ContainerPath: /otel
               ReadOnly: false
           LogConfiguration:
-            LogDriver: awsfirelens
+            LogDriver: awslogs
             Options:
-              Name: OpenTelemetry
+              awslogs-group: !Sub '/ecs/${ResourcePrefix}-jpetstore-otel-init'
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: init
+              awslogs-create-group: 'true'
         - Name: jpetstore
           Image: qainsights/jpetstore:latest
           Essential: true
@@ -418,57 +424,17 @@ Resources:
           PortMappings:
             - ContainerPort: 8080
               Protocol: tcp
-          Environment:
-            - Name: OTEL_SERVICE_NAME
-              Value: jpetstore
-            - Name: OTEL_TRACES_EXPORTER
-              Value: otlp
-            - Name: OTEL_LOGS_EXPORTER
-              Value: otlp
-            - Name: OTEL_METRICS_EXPORTER
-              Value: otlp
-            - Name: OTEL_EXPORTER_OTLP_ENDPOINT
-              Value: http://127.0.0.1:4317
-            - Name: OTEL_EXPORTER_OTLP_PROTOCOL
-              Value: grpc
           MountPoints:
             - SourceVolume: otel-agent
               ContainerPath: /otel
               ReadOnly: true
           LogConfiguration:
-            LogDriver: awsfirelens
+            LogDriver: awslogs
             Options:
-              Name: OpenTelemetry
-        - Name: otel-collector
-          Image: otel/opentelemetry-collector-contrib
-          Cpu: 0
-          Essential: false
-          Command:
-            - "--config"
-            - "env:SSM_CONFIG"
-          PortMappings:
-            - Name: otel-collector-4317-grpc
-              ContainerPort: 4317
-              Protocol: tcp
-              AppProtocol: grpc
-            - Name: otel-collector-4318-http
-              ContainerPort: 4318
-              Protocol: tcp
-          Environment:
-            - Name: PRIVATE_KEY
-              Value: !Ref PrivateKey
-            - Name: CORALOGIX_DOMAIN
-              Value: !FindInMap [CoralogixRegionMap, !Ref CoralogixRegion, Domain]
-          Secrets:
-            - Name: SSM_CONFIG
-              ValueFrom: !Ref ParameterName
-          User: "0"
-          LogConfiguration:
-            LogDriver: awsfirelens
-            Options:
-              Name: OpenTelemetry
-          FirelensConfiguration:
-            Type: fluentbit
+              awslogs-group: !Sub '/ecs/${ResourcePrefix}-jpetstore'
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: jpetstore
+              awslogs-create-group: 'true'
   Service:
     Type: AWS::ECS::Service
     DependsOn: TaskDefinition

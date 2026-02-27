@@ -20,13 +20,14 @@ resource "aws_cloudformation_stack" "jpetstore_otel" {
   template_body = file("${path.module}/task-definition.yaml")
 
   parameters = {
-    ClusterName       = aws_ecs_cluster.main.name
-    VpcId             = var.vpc_id
-    SubnetIds         = join(",", var.subnet_ids)
+    ClusterName        = aws_ecs_cluster.main.name
+    VpcId              = var.vpc_id
+    SubnetIds          = join(",", var.subnet_ids)
     AllowedCidrFor8080 = var.allowed_cidr_8080
-    CoralogixRegion   = local.coralogix_region
-    PrivateKey        = var.cx_data_token
-    StorageType       = "ParameterStoreAdvanced"
-    ParameterName     = "CX_OTEL_ECS_Fargate_config_${replace(local.stack_name, "-", "_")}"
+    CoralogixRegion    = local.coralogix_region
+    PrivateKey         = var.cx_data_token
+    StorageType        = "ParameterStoreAdvanced"
+    ParameterName      = "CX_OTEL_ECS_Fargate_config_${replace(local.stack_name, "-", "_")}"
+    ResourcePrefix     = local.stack_name
   }
 }
