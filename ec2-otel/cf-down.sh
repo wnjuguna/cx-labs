@@ -5,10 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 REGION="${AWS_REGION:-us-east-1}"
-PROFILE_ARGS=()
-[[ -n "$AWS_PROFILE" ]] && PROFILE_ARGS=(--profile "$AWS_PROFILE")
-REGION_ARGS=(--region "$REGION")
-AWS_CMD=(aws "${PROFILE_ARGS[@]}" "${REGION_ARGS[@]}")
+AWS_CMD=(aws --region "$REGION")
 
 USER_NAME="${USER:-$(id -un)}"
 NAME_SUFFIX=""

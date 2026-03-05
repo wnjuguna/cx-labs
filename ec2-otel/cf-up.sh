@@ -11,17 +11,14 @@ if [[ ! -f "$TEMPLATE_FILE" ]]; then
   exit 1
 fi
 
-if [[ -z "$AWS_ACCESS_KEY_ID" ]] && [[ -z "$AWS_PROFILE" ]]; then
-  echo "> No AWS credentials (AWS_ACCESS_KEY_ID or AWS_PROFILE). Log in to AWS and try again."
+if [[ -z "$AWS_ACCESS_KEY_ID" ]]; then
+  echo "> No AWS credentials found; set AWS_ACCESS_KEY_ID (and AWS_SECRET_ACCESS_KEY) and try again."
   exit 1
 fi
 
-# Region and profile for AWS CLI
+# Region for AWS CLI (same auth approach as other cx-labs: access keys from env)
 REGION="${AWS_REGION:-us-east-1}"
-PROFILE_ARGS=()
-[[ -n "$AWS_PROFILE" ]] && PROFILE_ARGS=(--profile "$AWS_PROFILE")
-REGION_ARGS=(--region "$REGION")
-AWS_CMD=(aws "${PROFILE_ARGS[@]}" "${REGION_ARGS[@]}")
+AWS_CMD=(aws --region "$REGION")
 
 # Stack and key naming: cs-${USER}-ec2-otel[-suffix]
 USER_NAME="${USER:-$(id -un)}"

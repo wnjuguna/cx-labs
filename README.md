@@ -97,7 +97,7 @@ Brings up an EC2 instance (Amazon Linux 2) with JPetstore (OTel-instrumented), n
 * `make outputs` - print stack outputs (InstanceId, PublicIP)
 * `make ssh` - SSH into the instance using the saved PEM
 
-Environment variables: `AWS_REGION` (default `us-east-1`), `AWS_PROFILE`, `USER`; optional `CX_TEAM_NAME` or `CX_LABS_NAME_SUFFIX` for stack/key naming; optional `CX_OWNER_EMAIL`, `CX_PROJECT` for key-pair tags; `EC2_OTEL_PEM_PATH` to override the PEM file location.
+Authentication is the same as other cx-labs: use AWS access keys from environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`). Other env vars: `AWS_REGION` (default `us-east-1`), `USER`; optional `CX_TEAM_NAME` or `CX_LABS_NAME_SUFFIX` for stack/key naming; optional `CX_OWNER_EMAIL`, `CX_PROJECT` for key-pair tags; `EC2_OTEL_PEM_PATH` to override the PEM file location.
 
 # Running labs in parallel
 

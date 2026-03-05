@@ -1,15 +1,14 @@
 # ec2-otel: CloudFormation-based EC2 VM (JPetstore + node_exporter). Key pair is created by cf-up.sh.
-# Run from ec2-otel/ with AWS credentials and optional AWS_REGION, AWS_PROFILE, CX_TEAM_NAME, CX_LABS_NAME_SUFFIX.
+# Run from ec2-otel/ with AWS access keys in env (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY) and optional AWS_REGION, CX_TEAM_NAME, CX_LABS_NAME_SUFFIX.
 
 USER_NAME := $(or $(USER),$(shell id -un))
 NAME_SUFFIX := $(if $(CX_TEAM_NAME),-$(CX_TEAM_NAME),$(if $(CX_LABS_NAME_SUFFIX),-$(CX_LABS_NAME_SUFFIX),))
 STACK_NAME := cs-$(USER_NAME)-ec2-otel$(NAME_SUFFIX)
 AWS_REGION ?= us-east-1
-AWS_PROFILE_ARG := $(if $(AWS_PROFILE),--profile $(AWS_PROFILE),)
-AWS_CMD := aws $(AWS_PROFILE_ARG) --region $(AWS_REGION)
+AWS_CMD := aws --region $(AWS_REGION)
 PEM_PATH ?= $(CURDIR)/$(STACK_NAME).pem
 
-export AWS_REGION AWS_PROFILE
+export AWS_REGION
 
 up:
 	./cf-up.sh
