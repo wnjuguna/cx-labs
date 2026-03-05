@@ -1,0 +1,77 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: EC2 Instance with Key Pair
+
+Parameters:
+  KeyName:
+    Description: Name of an existing EC2 KeyPair to enable SSH access
+    Type: AWS::EC2::KeyPair::KeyName
+    ConstraintDescription: Must be the name of an existing EC2 KeyPair.
+
+Resources:
+  EC2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable SSH + HTTP access
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 9100
+          ToPort: 9100
+          CidrIp: 0.0.0.0/0
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.small
+      KeyName: !Ref KeyName
+      SecurityGroups:
+        - !Ref EC2SecurityGroup
+      ImageId: ami-0c12c782c6284b66c # Amazon Linux 2 (us-east-1)
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash -xe
+          sudo yum remove -y java-1.7.0-openjdk
+          yum install -y aws-cfn-bootstrap
+          /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource EC2Instance --region ${AWS::Region}
+    Metadata:
+      AWS::CloudFormation::Init:
+        config:
+          packages:
+            yum:
+              git: []
+              tmux: []
+              java-1.8.0-openjdk-devel: []
+          commands:
+            step1:
+              command: 'git clone https://github.com/kazuki43zoo/mybatis-spring-boot-jpetstore.git mybatis-spring-boot-jpetstore'
+              cwd: '/home/ec2-user'
+            step2:
+              command: './mvnw clean package -DskipTests=true'
+              cwd: '/home/ec2-user/mybatis-spring-boot-jpetstore'
+              env:
+                JAVA_HOME: '/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.462.b08-1.amzn2.0.1.x86_64'
+            step3:
+              command: 'wget https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/latest/download/opentelemetry-javaagent.jar'
+              cwd: '/home/ec2-user'
+            step4:
+              command: 'su - ec2-user -c "tmux new -s jpetstore -d \"java -javaagent:/home/ec2-user/opentelemetry-javaagent.jar -jar /home/ec2-user/mybatis-spring-boot-jpetstore/target/mybatis-spring-boot-jpetstore-2.0.0-SNAPSHOT.jar\""'
+              cwd: '/home/ec2-user'
+            step5:
+              command: 'tmux new -s node_exporter -d "./node_exporter"'
+              cwd: '/home/ec2-user/node_exporter-1.9.1.linux-amd64'
+          sources:
+            /home/ec2-user: https://github.com/prometheus/node_exporter/releases/download/v1.9.1/node_exporter-1.9.1.linux-amd64.tar.gz
+Outputs:
+  InstanceId:
+    Description: Instance ID
+    Value: !Ref EC2Instance
+
+  PublicIP:
+    Description: Public IP address of the instance
+    Value: !GetAtt EC2Instance.PublicIp
