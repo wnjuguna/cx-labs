@@ -89,15 +89,16 @@ Brings up George Pickers' Tracey Reloaded: https://github.com/georgep1ckers/trac
 
 ## ec2-otel
 
-Brings up an EC2 instance (Amazon Linux 2) with JPetstore (OTel-instrumented), node_exporter, and SSH/HTTP access via CloudFormation. The key pair required by the template is created automatically by `make up` and the private key is saved under `ec2-otel/` (or `EC2_OTEL_PEM_PATH` if set). On `make destroy`, the stack and the key pair are deleted.
+Brings up an EC2 instance (Amazon Linux 2023) with JPetstore (OTel-instrumented), node_exporter, and SSH/HTTP access. Terraform/OpenTofu creates the key pair (from your existing `~/.ssh` public key) and deploys the CloudFormation stack ([ec2-otel/otel-vm.yaml](ec2-otel/otel-vm.yaml)); everything is destroyable with `make destroy` (tf destroy).
 
-* `make up` - create EC2 key pair (if missing), save PEM, deploy CloudFormation stack
-* `make destroy` - delete the stack, then delete the key pair
-* `make plan` - validate template and show stack status
-* `make outputs` - print stack outputs (InstanceId, PublicIP)
-* `make ssh` - SSH into the instance using the saved PEM
+* `make up` - create key pair and deploy CF stack via Terraform
+* `make destroy` - destroy stack and key pair (tf destroy)
+* `make plan` - Terraform plan
+* `make outputs` - print Terraform outputs (public_ip, instance_id)
+* `make ssh` - SSH into the instance (uses `~/.ssh/id_ed25519` or `~/.ssh/id_rsa`; set `PRIVATE_SSH_KEY_PATH` to override)
+* `make workspaces` - list Terraform workspaces
 
-Authentication is the same as other cx-labs: use AWS access keys from environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`). Other env vars: `AWS_REGION` (default `us-east-1`), `USER`; optional `CX_TEAM_NAME` or `CX_LABS_NAME_SUFFIX` for stack/key naming; optional `CX_OWNER_EMAIL`, `CX_PROJECT` for key-pair tags; `EC2_OTEL_PEM_PATH` to override the PEM file location.
+Authentication is the same as other cx-labs: AWS access keys from environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`). Other env vars: `AWS_REGION`, `USER`; optional `CX_TEAM_NAME` or `CX_LABS_NAME_SUFFIX` for stack/key naming. SSH uses your existing key at `~/.ssh/id_ed25519` or `~/.ssh/id_rsa` (or set `AWS_SSH_PUBKEY` / `AWS_SSH_PRIVKEY` when using the wrapper).
 
 # Running labs in parallel
 
