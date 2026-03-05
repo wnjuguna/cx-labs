@@ -32,7 +32,7 @@ Resources:
       KeyName: !Ref KeyName
       SecurityGroups:
         - !Ref EC2SecurityGroup
-      ImageId: ami-0c12c782c6284b66c # Amazon Linux 2 (us-east-1)
+      ImageId: '{{resolve:ssm:/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2}}'
       UserData:
         Fn::Base64: !Sub |
           #!/bin/bash -xe
@@ -55,7 +55,7 @@ Resources:
               command: './mvnw clean package -DskipTests=true'
               cwd: '/home/ec2-user/mybatis-spring-boot-jpetstore'
               env:
-                JAVA_HOME: '/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.462.b08-1.amzn2.0.1.x86_64'
+                JAVA_HOME: '/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.482.b08-1.amzn2.0.1.x86_64'
             step3:
               command: 'wget https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/latest/download/opentelemetry-javaagent.jar'
               cwd: '/home/ec2-user'
