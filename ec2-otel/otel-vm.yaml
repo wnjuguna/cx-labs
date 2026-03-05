@@ -32,12 +32,11 @@ Resources:
       KeyName: !Ref KeyName
       SecurityGroups:
         - !Ref EC2SecurityGroup
-      ImageId: '{{resolve:ssm:/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2}}'
+      ImageId: '{{resolve:ssm:/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64}}'
       UserData:
         Fn::Base64: !Sub |
           #!/bin/bash -xe
-          sudo yum remove -y java-1.7.0-openjdk
-          yum install -y aws-cfn-bootstrap
+          dnf install -y aws-cfn-bootstrap
           /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource EC2Instance --region ${AWS::Region}
     Metadata:
       AWS::CloudFormation::Init:
@@ -46,7 +45,7 @@ Resources:
             yum:
               git: []
               tmux: []
-              java-1.8.0-openjdk-devel: []
+              java-1.8.0-amazon-corretto-devel: []
           commands:
             step1:
               command: 'git clone https://github.com/kazuki43zoo/mybatis-spring-boot-jpetstore.git mybatis-spring-boot-jpetstore'
@@ -55,7 +54,7 @@ Resources:
               command: './mvnw clean package -DskipTests=true'
               cwd: '/home/ec2-user/mybatis-spring-boot-jpetstore'
               env:
-                JAVA_HOME: '/usr/lib/jvm/java-1.8.0-openjdk-1.8.0.482.b08-1.amzn2.0.1.x86_64'
+                JAVA_HOME: '/usr/lib/jvm/java-1.8.0-amazon-corretto'
             step3:
               command: 'wget https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/latest/download/opentelemetry-javaagent.jar'
               cwd: '/home/ec2-user'
