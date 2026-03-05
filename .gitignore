@@ -9,5 +9,6 @@
 **/*.bak
 **/inventory.ini
 postgres/tracey-reloaded
+ec2-otel/*.pem
 */*values.yaml
 */*cm.yaml

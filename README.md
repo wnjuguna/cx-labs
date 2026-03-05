@@ -87,6 +87,18 @@ Brings up George Pickers' Tracey Reloaded: https://github.com/georgep1ckers/trac
 * `make postgres` - install tracey-reloaded on k3s
 * `make k9s` - open K9s on the cluster
 
+## ec2-otel
+
+Brings up an EC2 instance (Amazon Linux 2) with JPetstore (OTel-instrumented), node_exporter, and SSH/HTTP access via CloudFormation. The key pair required by the template is created automatically by `make up` and the private key is saved under `ec2-otel/` (or `EC2_OTEL_PEM_PATH` if set). On `make destroy`, the stack and the key pair are deleted.
+
+* `make up` - create EC2 key pair (if missing), save PEM, deploy CloudFormation stack
+* `make destroy` - delete the stack, then delete the key pair
+* `make plan` - validate template and show stack status
+* `make outputs` - print stack outputs (InstanceId, PublicIP)
+* `make ssh` - SSH into the instance using the saved PEM
+
+Environment variables: `AWS_REGION` (default `us-east-1`), `AWS_PROFILE`, `USER`; optional `CX_TEAM_NAME` or `CX_LABS_NAME_SUFFIX` for stack/key naming; optional `CX_OWNER_EMAIL`, `CX_PROJECT` for key-pair tags; `EC2_OTEL_PEM_PATH` to override the PEM file location.
+
 # Running labs in parallel
 
 If the `CX_TEAM_NAME` or `CX_LABS_WORKSPACE_NAME` environment variable is set, then it will be used to name a tf
