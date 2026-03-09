@@ -87,6 +87,17 @@ Brings up George Pickers' Tracey Reloaded: https://github.com/georgep1ckers/trac
 * `make postgres` - install tracey-reloaded on k3s
 * `make k9s` - open K9s on the cluster
 
+## ecs-ec2
+
+This will bring up an ECS cluster with one EC2 instance and deploy jpetstore + OpenTelemetry (bridge networking, no Parameter Store).
+
+* `make up` - create the cluster, EC2 capacity, S3 bucket, and deploy the CloudFormation stack
+* `make destroy` - destroy the stack and cluster
+* `make plan` - terraform plan
+* `make workspaces` - list terraform workspaces
+
+Terraform creates the ECS cluster, a host security group, an EC2 capacity provider (1 instance), an S3 bucket with a dynamic name, and deploys a CloudFormation stack with the task definition and service.
+
 # Running labs in parallel
 
 If the `CX_TEAM_NAME` or `CX_LABS_WORKSPACE_NAME` environment variable is set, then it will be used to name a tf
