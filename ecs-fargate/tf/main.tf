@@ -1,6 +1,13 @@
 locals {
-  cluster_name = "${var.thing_name}${var.name_suffix}"
-  stack_name   = "${var.thing_name}${var.name_suffix}"
+  # ECS cluster and CloudFormation names allow only alphanumerics, hyphens, underscores.
+  # Sanitize so e.g. $USER with "." (e.g. john.doe) does not produce an invalid name.
+  raw_name = "${var.thing_name}${var.name_suffix}"
+  sanitized_name = replace(
+    replace(replace(replace(local.raw_name, ".", "-"), " ", "-"), "/", "-"),
+    "@", "-"
+  )
+  cluster_name = local.sanitized_name
+  stack_name   = local.sanitized_name
   # Map cx_domain (e.g. eu2.coralogix.com) to template region (EU2); override with var.coralogix_region if set
   coralogix_region = var.coralogix_region != "" ? var.coralogix_region : upper(split(".", var.cx_domain)[0])
 }
