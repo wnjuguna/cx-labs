@@ -43,7 +43,7 @@ variable "region" {
 }
 
 variable "thing_name" {
-  description = "Name of the EC1 Instance"
+  description = "Name of the EC2 Instance"
   type = string
 }
 

@@ -24,16 +24,13 @@ if [ -z "$AWS_ACCESS_KEY_ID" ]; then
   exit 1
 fi
 
-# Make all the CX_* vars into TF vars, lowercasing the name.
-# Also the username, for labelling the artefacts
-while read env_var; do
-  export TF_VAR_$env_var
-done <<< $(env | grep -e '^CX_' -e '^USER=' | awk -F= '{print tolower($1) "=" $2}')
-# This will be the name of the keypair in AWS. We'll delete it on destroy anyway
-export TF_VAR_aws_ssh_key_name=$USER
+export TF_VAR_cx_data_key=$CX_DATA_KEY
+export TF_VAR_cx_data_token=${CX_DATA_TOKEN:-$CX_DATA_KEY}
+export TF_VAR_cx_region=$CX_REGION
+export TF_VAR_cx_domain=$CX_DOMAIN
 
 # Allow $USERNAME to override $USER so it's possible to set something custom.
-if [ ! -z "$USERNAME"]; then
+if [ ! -z "$USERNAME" ]; then
   echo "> Found USERNAME env var (set to '$USERNAME'); replacing USER (was '$USER')"
   USER=$USERNAME
 fi
@@ -105,18 +102,18 @@ elif [ -f ~/.ssh/id_ed25519.pub ]; then
 fi
 echo "> Found SSH keypair: $TF_VAR_public_ssh_key_path and $TF_VAR_private_ssh_key_path"
 
-# alphanumeric characters, underscores, hyphens, slashes, hash signs and dots are allowed
-#if [ -z "CX_TEAM_NAME" ]; then
-#  export TF_VAR_thing_name="${project}_${TF_VAR_user}"
-#else
-#  export TF_VAR_thing_name="${project}_${TF_VAR_user}_${CX_TEAM_NAME}"
-#fi
-export TF_VAR_thing_name="cs-${TF_VAR_user}-$project"
+# ECS: The cluster name must consist of alphanumerics, hyphens, and underscores.
+thing_name="cs-tam-${TF_VAR_user}-$project"
+export TF_VAR_thing_name="${thing_name/./-}"
+echo "> Thing name: $TF_VAR_thing_name"
+
+echo "${VERSIONNUMBERNAME/./_}"
+
 
 if [ ! -z "$CX_TEAM_NAME" ]; then
   export TF_VAR_name_suffix="-$CX_TEAM_NAME"
   echo "> Name suffix: $TF_VAR_name_suffix"
-elif [ !-z "$CX_LABS_NAME_SUFFIX" ]; then
+elif [ ! -z "$CX_LABS_NAME_SUFFIX" ]; then
   export TF_VAR_name_suffix="-$CX_LABS_NAME_SUFFIX"
   echo "> Name suffix: $TF_VAR_name_suffix"
 fi

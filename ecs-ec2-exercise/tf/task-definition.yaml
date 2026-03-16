@@ -1,0 +1,431 @@
+# CloudFormation template for ecs-ec2-exercise: ECS/EC2 cluster + jpetstore (bridge mode), no Parameter Store
+# Terraform deploys this stack; similar to ecs-fargate-exercise pattern
+AWSTemplateFormatVersion: "2010-09-09"
+Description: ECS EC2 exercise - cluster (1 t3.large), S3 bucket, jpetstore + OTEL Java agent init (bridge)
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC for the ECS EC2 host and security group
+  SubnetIds:
+    Type: String
+    Description: Subnet IDs for the ASG (comma-separated string)
+  InstanceType:
+    Type: String
+    Default: t3.large
+    Description: EC2 instance type for the ECS capacity (t3.large for this lab)
+  AllowedCidr8080:
+    Type: String
+    Default: 0.0.0.0/0
+    Description: CIDR allowed to access the app and OTEL ports on the host
+  CoralogixRegion:
+    Type: String
+    Description: Coralogix region [EU1, EU2, AP1, AP2, AP3, US1, US2]
+    AllowedValues:
+      - EU1
+      - EU2
+      - AP1
+      - AP2
+      - AP3
+      - US1
+      - US2
+  PrivateKey:
+    Type: String
+    Description: Coralogix Send-Your-Data API Key
+    NoEcho: true
+  ResourcePrefix:
+    Type: String
+    Description: Unique prefix for this deployment (e.g. stack name). Used for cluster name, task definition family, log groups.
+    AllowedPattern: '^[a-zA-Z0-9_-]+$'
+    MaxLength: 128
+
+Mappings:
+  CoralogixRegionMap:
+    EU1: { Endpoint: ingress.eu1.coralogix.com, Domain: eu1.coralogix.com }
+    EU2: { Endpoint: ingress.eu2.coralogix.com, Domain: eu2.coralogix.com }
+    AP1: { Endpoint: ingress.ap1.coralogix.com, Domain: ap1.coralogix.com }
+    AP2: { Endpoint: ingress.ap2.coralogix.com, Domain: ap2.coralogix.com }
+    AP3: { Endpoint: ingress.ap3.coralogix.com, Domain: ap3.coralogix.com }
+    US1: { Endpoint: ingress.us1.coralogix.com, Domain: us1.coralogix.com }
+    US2: { Endpoint: ingress.us2.coralogix.com, Domain: us2.coralogix.com }
+
+Resources:
+  HelperLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  HelperLambdaPolicy:
+    Type: AWS::IAM::Policy
+    DependsOn: HelperLambdaRole
+    Properties:
+      PolicyName: SSMRead
+      Roles:
+        - !Ref HelperLambdaRole
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action: ssm:GetParameter
+            Resource: !Sub "arn:aws:ssm:${AWS::Region}::parameter/aws/service/ecs/optimized-ami/amazon-linux-2/recommended"
+
+  HelperLambda:
+    Type: AWS::Lambda::Function
+    DependsOn: HelperLambdaPolicy
+    Properties:
+      FunctionName: !Sub "${ResourcePrefix}-cf-helper"
+      Runtime: python3.12
+      Handler: index.handler
+      Role: !GetAtt HelperLambdaRole.Arn
+      Timeout: 30
+      Code:
+        ZipFile: |
+          import json, boto3, random, string, urllib.request
+          def send(event, context, status, data, reason=None):
+            body = json.dumps({"Status": status, "Reason": reason or "", "PhysicalResourceId": event.get("LogicalResourceId", "id"), "Data": data, "StackId": event["StackId"], "RequestId": event["RequestId"], "LogicalResourceId": event["LogicalResourceId"]})
+            req = urllib.request.Request(event["ResponseURL"], data=body.encode(), method="PUT", headers={"Content-Type": ""})
+            urllib.request.urlopen(req)
+          def handler(event, context):
+            action = event.get("ResourceProperties", {}).get("Action", "")
+            if event.get("RequestType") == "Delete":
+              send(event, context, "SUCCESS", {})
+              return
+            try:
+              if action == "GetEcsAmi":
+                r = boto3.client("ssm").get_parameter(Name="/aws/service/ecs/optimized-ami/amazon-linux-2/recommended")
+                data = {"AmiId": json.loads(r["Parameter"]["Value"])["image_id"]}
+              elif action == "RandomSuffix":
+                data = {"Suffix": "".join(random.choices(string.hexdigits.lower()[:16], k=8))}
+              else:
+                send(event, context, "FAILED", {}, reason="Unknown Action")
+                return
+              send(event, context, "SUCCESS", data)
+            except Exception as e:
+              send(event, context, "FAILED", {}, reason=str(e))
+
+  HelperLambdaPermission:
+    Type: AWS::Lambda::Permission
+    DependsOn: HelperLambda
+    Properties:
+      FunctionName: !Ref HelperLambda
+      Action: lambda:InvokeFunction
+      Principal: cloudformation.amazonaws.com
+      SourceArn: !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AWS::StackName}/*"
+
+  GetEcsAmi:
+    Type: AWS::CloudFormation::CustomResource
+    DependsOn: HelperLambdaPermission
+    Properties:
+      ServiceToken: !GetAtt HelperLambda.Arn
+      Action: GetEcsAmi
+
+  RandomSuffix:
+    Type: AWS::CloudFormation::CustomResource
+    DependsOn: HelperLambdaPermission
+    Properties:
+      ServiceToken: !GetAtt HelperLambda.Arn
+      Action: RandomSuffix
+
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Ref ResourcePrefix
+      ClusterSettings:
+        - Name: containerInsights
+          Value: enabled
+
+  HostSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: ECS EC2 host (bridge mode; ports 8080, 4317, 4318)
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          CidrIp: !Ref AllowedCidr8080
+          Description: jpetstore app
+        - IpProtocol: tcp
+          FromPort: 4317
+          ToPort: 4317
+          CidrIp: !Ref AllowedCidr8080
+          Description: OTLP gRPC
+        - IpProtocol: tcp
+          FromPort: 4318
+          ToPort: 4318
+          CidrIp: !Ref AllowedCidr8080
+          Description: OTLP HTTP
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub ${ResourcePrefix}-ecs-host
+
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    DependsOn: RandomSuffix
+    Properties:
+      BucketName: !Sub "${ResourcePrefix}-ecs-ec2-exercise-${RandomSuffix.Suffix}"
+
+  EC2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${ResourcePrefix}-ecs-ec2-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role
+
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub ${ResourcePrefix}-ecs-ec2
+      Roles:
+        - !Ref EC2Role
+
+  WaitConditionHandle:
+    Type: AWS::CloudFormation::WaitConditionHandle
+  WaitCondition:
+    Type: AWS::CloudFormation::WaitCondition
+    DependsOn: ASG
+    Properties:
+      Handle: !Ref WaitConditionHandle
+      Timeout: 600
+      Count: 1
+
+  LaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    DependsOn:
+      - EC2InstanceProfile
+      - WaitConditionHandle
+      - GetEcsAmi
+    Properties:
+      LaunchTemplateName: !Sub ${ResourcePrefix}-ecs-lt
+      LaunchTemplateData:
+        ImageId: !GetAtt GetEcsAmi.AmiId
+        InstanceType: !Ref InstanceType
+        IamInstanceProfile:
+          Name: !Ref EC2InstanceProfile
+        SecurityGroupIds:
+          - !Ref HostSecurityGroup
+        UserData:
+          Fn::Base64:
+            Fn::Sub:
+              - |
+                #!/bin/bash
+                set -e
+                echo "ECS_CLUSTER=${ResourcePrefix}" >> /etc/ecs/ecs.config
+                echo "ECS_ENABLE_CONTAINER_METADATA=true" >> /etc/ecs/ecs.config
+                sleep 120
+                curl -sS -X PUT -H "Content-Type: application/json" -d '{"Status":"SUCCESS","Reason":"ECS instance ready","UniqueId":"1","Data":""}' "${WaitConditionHandle}"
+              - WaitConditionHandle: !Ref WaitConditionHandle
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: !Sub ${ResourcePrefix}-ecs-instance
+
+  ASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    DependsOn: LaunchTemplate
+    Properties:
+      AutoScalingGroupName: !Sub ${ResourcePrefix}-ecs
+      VPCZoneIdentifier: !Split [ ",", !Ref SubnetIds ]
+      MinSize: "1"
+      MaxSize: "1"
+      DesiredCapacity: "1"
+      LaunchTemplate:
+        LaunchTemplateId: !Ref LaunchTemplate
+        Version: !GetAtt LaunchTemplate.LatestVersionNumber
+      Tags:
+        - Key: AmazonECSManaged
+          Value: "true"
+          PropagateAtLaunch: true
+        - Key: Name
+          Value: !Sub ${ResourcePrefix}-ecs
+          PropagateAtLaunch: true
+
+  CapacityProvider:
+    Type: AWS::ECS::CapacityProvider
+    DependsOn: ASG
+    Properties:
+      Name: !Sub ${ResourcePrefix}-ec2
+      AutoScalingGroupProvider:
+        AutoScalingGroupArn: !Ref ASG
+        ManagedScaling:
+          Status: ENABLED
+          TargetCapacity: 100
+        ManagedTerminationProtection: DISABLED
+
+  ClusterCapacityProviderAssociations:
+    Type: AWS::ECS::ClusterCapacityProviderAssociations
+    DependsOn: CapacityProvider
+    Properties:
+      Cluster: !Ref ECSCluster
+      CapacityProviders:
+        - !Ref CapacityProvider
+      DefaultCapacityProviderStrategy:
+        - CapacityProvider: !Ref CapacityProvider
+          Weight: 100
+          Base: 0
+
+  TaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: ECS task execution (pull images, logs). No Parameter Store permissions.
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      RoleName: !Sub 'AWSOTelExecutionRole-${AWS::StackName}'
+      Policies:
+        - PolicyName: CloudWatchLogsCreateGroup
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:DescribeLogGroups
+                  - logs:DescribeLogStreams
+                Resource:
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/ecs/${ResourcePrefix}-*"
+
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub '${ResourcePrefix}-jpetstore-otel'
+      NetworkMode: bridge
+      RequiresCompatibilities:
+        - EC2
+      Cpu: "512"
+      Memory: "512"
+      ExecutionRoleArn: !GetAtt TaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt TaskRole.Arn
+      Volumes:
+        - Name: otel-agent
+      ContainerDefinitions:
+        - Name: otel-agent-init
+          Image: alpine:3.19
+          Essential: false
+          Command:
+            - sh
+            - -c
+            - "mkdir -p /otel && wget -q -O /otel/opentelemetry-javaagent.jar 'https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v2.25.0/opentelemetry-javaagent.jar' && echo 'OpenTelemetry Java agent downloaded'"
+          MountPoints:
+            - SourceVolume: otel-agent
+              ContainerPath: /otel
+              ReadOnly: false
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Sub '/ecs/${ResourcePrefix}-jpetstore-otel-init'
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: init
+              awslogs-create-group: 'true'
+        - Name: jpetstore
+          Image: qainsights/jpetstore:latest
+          Essential: true
+          DependsOn:
+            - ContainerName: otel-agent-init
+              Condition: SUCCESS
+          Environment:
+            - Name: OTEL_EXPORTER_OTLP_ENDPOINT
+              Value: !Sub
+                - "https://${Endpoint}"
+                - Endpoint: !FindInMap [CoralogixRegionMap, !Ref CoralogixRegion, Endpoint]
+            - Name: OTEL_EXPORTER_OTLP_HEADERS
+              Value: !Sub "Authorization=Bearer ${PrivateKey}"
+          Command:
+            - "./mvnw"
+            - "cargo:run"
+            - "-P"
+            - "tomcat90"
+            - "-Dcargo.jvmargs=-javaagent:/otel/opentelemetry-javaagent.jar"
+          PortMappings:
+            - ContainerPort: 8080
+              HostPort: 8080
+              Protocol: tcp
+          MountPoints:
+            - SourceVolume: otel-agent
+              ContainerPath: /otel
+              ReadOnly: true
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Sub '/ecs/${ResourcePrefix}-jpetstore'
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: jpetstore
+              awslogs-create-group: 'true'
+
+  Service:
+    Type: AWS::ECS::Service
+    DependsOn:
+      - TaskDefinition
+      - ClusterCapacityProviderAssociations
+      - WaitCondition
+    Properties:
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref TaskDefinition
+      LaunchType: EC2
+      DesiredCount: 1
+
+Outputs:
+  ClusterName:
+    Description: ECS cluster name
+    Value: !Ref ECSCluster
+    Export:
+      Name: !Sub "${AWS::StackName}-ClusterName"
+  ClusterArn:
+    Description: ECS cluster ARN
+    Value: !GetAtt ECSCluster.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-ClusterArn"
+  BucketName:
+    Description: S3 bucket name
+    Value: !Ref S3Bucket
+    Export:
+      Name: !Sub "${AWS::StackName}-BucketName"
+  BucketArn:
+    Description: S3 bucket ARN
+    Value: !GetAtt S3Bucket.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-BucketArn"
+  TaskDefinitionArn:
+    Description: ECS task definition ARN
+    Value: !Ref TaskDefinition
+    Export:
+      Name: !Sub "${AWS::StackName}-TaskDefinitionArn"
+  ServiceName:
+    Description: ECS service name
+    Value: !GetAtt Service.Name
