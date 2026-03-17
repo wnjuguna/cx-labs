@@ -359,13 +359,6 @@ Resources:
           DependsOn:
             - ContainerName: otel-agent-init
               Condition: SUCCESS
-          Environment:
-            - Name: OTEL_EXPORTER_OTLP_ENDPOINT
-              Value: !Sub
-                - "https://${Endpoint}"
-                - Endpoint: !FindInMap [CoralogixRegionMap, !Ref CoralogixRegion, Endpoint]
-            - Name: OTEL_EXPORTER_OTLP_HEADERS
-              Value: !Sub "Authorization=Bearer ${PrivateKey}"
           Command:
             - "./mvnw"
             - "cargo:run"
