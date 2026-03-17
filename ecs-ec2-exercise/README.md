@@ -1,14 +1,22 @@
 # ecs-ec2-exercise
 
-Similar to **ecs-fargate-exercise**: Terraform deploys a single CloudFormation template that creates the ECS/EC2 cluster and the jpetstore application. One **t3.large** instance is used for the lab cluster. Tasks use **awsvpc** networking (task-level security group for app and OTLP ports). No Parameter Store or extra Task Execution Role permissions.
+Terraform deploys a single CloudFormation template that creates the ECS/EC2 cluster and the jpetstore application. One **t3.large** instance is used for the lab cluster.
+
+## Details
+
+- The EC2 host IP is discovered dynamically using the IMDS v1 endpoint. `OTEL_EXPORTER_OTLP_ENDPOINT` is set to `http://$HOST_IP:4318`.
+- The application container uses **bridge** networking.
+- The S3 bucket required by the Coralogix ECS/EC2 integration is created by this installation.
+- The jpetstore application is reachable at `http://<public-ip>:8080/jpetstore` (use the EC2 instance's public IP).
+- Install the Coralogix ECS/EC2 integration to ship telemetry to Coralogix.
 
 ## Prerequisites
 
-- AWS CLI configured (credentials and region)
 - `CX_DATA_TOKEN` – Coralogix Send-Your-Data API key
-- Optional: `CX_DOMAIN` (default `eu2.coralogix.com`), `AWS_REGION` (default `eu-north-1`)
+- `AWS_REGION` (default `eu-north-1`)
+- Optional: `CX_DOMAIN` (default `eu2.coralogix.com`)
 
-The lab uses the **default VPC** and its subnets. Ensure a default VPC exists in the target region.
+The lab uses the **default VPC** and its subnets. Ensure a default VPC exists in the target region. To reach jpetstore at the URL above, the instance needs a public IP (e.g. use default VPC public subnets).
 
 ## Usage
 
