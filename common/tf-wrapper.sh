@@ -103,7 +103,7 @@ fi
 echo "> Found SSH keypair: $TF_VAR_public_ssh_key_path and $TF_VAR_private_ssh_key_path"
 
 # ECS: The cluster name must consist of alphanumerics, hyphens, and underscores.
-thing_name="cs-tam-${TF_VAR_user}-$project"
+thing_name="cs-${TF_VAR_user}-$project"
 export TF_VAR_thing_name="${thing_name/./-}"
 echo "> Thing name: $TF_VAR_thing_name"
 

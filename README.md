@@ -89,6 +89,19 @@ to generate nonsense telemetry: https://github.com/BigRedS/tiny-telemetry
 
 The task definition for tiny-telemetry is in `tf/tiny_telemetry_task.tf`; delete this to not-provision it, and
 replace with your own task def if you've any other workloads you'd like to run instead.
+## ecs-fargate
+
+Brings up an ECS Fargate cluster and deploys the jpetstore + OpenTelemetry stack via
+CloudFormation (task definition, service, OTEL collector, IAM roles, SSM parameter).
+Uses the default VPC and subnets. Data is sent to Coralogix using `CX_DATA_TOKEN` and
+`CX_DOMAIN` (region is derived from the domain, e.g. eu2.coralogix.com → EU2).
+
+* `make up` - create the ECS cluster and deploy the CloudFormation stack (jpetstore + OTEL)
+* `make destroy` - delete the stack and cluster
+* `make plan` - terraform plan
+* `make workspaces` - list terraform workspaces
+
+Requires `CX_DATA_TOKEN` and optionally `CX_DOMAIN` and `AWS_REGION`. No SSH key needed.
 
 ## postgres
 
