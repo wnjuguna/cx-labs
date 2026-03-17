@@ -222,6 +222,8 @@ Resources:
           Name: !Ref EC2InstanceProfile
         SecurityGroupIds:
           - !Ref HostSecurityGroup
+        MetadataOptions:
+          HttpPutResponseHopLimit: 2
         UserData:
           Fn::Base64:
             Fn::Sub:
@@ -341,7 +343,7 @@ Resources:
           Command:
             - sh
             - -c
-            - "mkdir -p /otel && wget -q -O /otel/opentelemetry-javaagent.jar 'https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v2.25.0/opentelemetry-javaagent.jar' && echo 'OpenTelemetry Java agent downloaded'"
+            - "mkdir -p /otel && wget -q -O /otel/opentelemetry-javaagent.jar 'https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v2.25.0/opentelemetry-javaagent.jar' && wget -qO- http://169.254.169.254/latest/meta-data/local-ipv4 > /otel/host_ip && echo 'OpenTelemetry Java agent downloaded; Host IP:' && cat /otel/host_ip"
           MountPoints:
             - SourceVolume: otel-agent
               ContainerPath: /otel
@@ -359,12 +361,13 @@ Resources:
           DependsOn:
             - ContainerName: otel-agent-init
               Condition: SUCCESS
+          Environment:
+            - Name: OTEL_SERVICE_NAME
+              Value: jpetstore
           Command:
-            - "./mvnw"
-            - "cargo:run"
-            - "-P"
-            - "tomcat90"
-            - "-Dcargo.jvmargs=-javaagent:/otel/opentelemetry-javaagent.jar"
+            - sh
+            - -c
+            - "HOST_IP=$(cat /otel/host_ip) && export OTEL_EXPORTER_OTLP_ENDPOINT=http://$HOST_IP:4318 && ./mvnw cargo:run -P tomcat90 -Dcargo.jvmargs=-javaagent:/otel/opentelemetry-javaagent.jar"
           PortMappings:
             - ContainerPort: 8080
               HostPort: 8080
