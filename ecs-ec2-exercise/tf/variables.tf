@@ -65,7 +65,7 @@ variable "allowed_cidr_8080" {
 }
 
 variable "ecs_ec2_instance_type" {
-  description = "EC2 instance type for the ECS cluster capacity (t3.large for this lab)"
+  description = "EC2 instance type for the ECS cluster capacity (t3.medium for this lab)"
   type        = string
-  default     = "t3.large"
+  default     = "t3.medium"
 }

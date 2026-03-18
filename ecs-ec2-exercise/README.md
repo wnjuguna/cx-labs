@@ -1,6 +1,6 @@
 # ecs-ec2-exercise
 
-Terraform deploys a single CloudFormation template that creates the ECS/EC2 cluster and the jpetstore application. One **t3.large** instance is used for the lab cluster.
+Terraform deploys a single CloudFormation template that creates the ECS/EC2 cluster and the jpetstore application. One **t3.medium** instance is used for the lab cluster.
 
 ## Details
 
