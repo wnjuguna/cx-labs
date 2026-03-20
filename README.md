@@ -105,14 +105,16 @@ Requires `CX_DATA_TOKEN` and optionally `CX_DOMAIN` and `AWS_REGION`. No SSH key
 
 ## lambda-exercise
 
-Brings up an S3 bucket (with an initial `file.txt`), an SQS queue, and two Python Lambda functions:
+Brings up an S3 bucket, an SQS queue, and two Python Lambda functions:
 a producer (S3 object-created → sends filename to SQS) and a consumer (SQS → prints filename to stdout).
-Resources are defined in a CloudFormation template; Terraform creates the stack and uploads `file.txt`.
+Resources are defined in a CloudFormation template; Terraform creates the stack.
 
-* `make up` - create the CloudFormation stack and upload file.txt (triggers producer → consumer)
+* `make up` - create the CloudFormation stack
 * `make destroy` - delete the stack
 * `make plan` - terraform plan
 * `make workspaces` - list terraform workspaces
+
+After `make up`, upload a file to the bucket to trigger the producer function.
 
 Requires AWS credentials. Optional: `AWS_REGION` (default `eu-north-1`). No SSH key or Coralogix config needed.
 
