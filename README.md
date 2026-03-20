@@ -116,7 +116,11 @@ Resources are defined in a CloudFormation template; Terraform creates the stack.
 
 After `make up`, upload a file to the bucket to trigger the producer function.
 
-Requires AWS credentials. Optional: `AWS_REGION` (default `eu-north-1`). No SSH key or Coralogix config needed.
+Requires AWS credentials. Optional: `AWS_REGION` (default `eu-north-1`).
+
+Recommended Coralogix integrations for telemetry from this lab:
+* `Lambda Auto Instrumentation`
+* `AWS Resource Metadata Collection`
 
 ## postgres
 

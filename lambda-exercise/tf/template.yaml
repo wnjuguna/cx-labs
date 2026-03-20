@@ -1,0 +1,224 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: S3 bucket, SQS queue, producer Lambda (S3 to SQS), consumer Lambda (SQS to stdout)
+
+Parameters:
+  StackNamePrefix:
+    Type: String
+    Description: Prefix for resource names (e.g. stack name from Terraform)
+
+Resources:
+  Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${StackNamePrefix}-bucket"
+
+  Queue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${StackNamePrefix}-queue"
+
+  ProducerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+
+  ProducerRolePolicy:
+    Type: AWS::IAM::Policy
+    DependsOn: ProducerRole
+    Properties:
+      PolicyName: ProducerPolicy
+      Roles:
+        - !Ref ProducerRole
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - s3:ListBucket
+            Resource: !GetAtt Bucket.Arn
+          - Effect: Allow
+            Action:
+              - s3:GetObject
+            Resource: !Sub "${Bucket.Arn}/*"
+          - Effect: Allow
+            Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - sqs:SendMessage
+            Resource: !GetAtt Queue.Arn
+          - Effect: Allow
+            Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+            Resource: "*"
+
+  ProducerLambda:
+    Type: AWS::Lambda::Function
+    DependsOn: ProducerRolePolicy
+    Properties:
+      FunctionName: !Sub "${StackNamePrefix}-producer"
+      Runtime: python3.12
+      Handler: index.handler
+      Role: !GetAtt ProducerRole.Arn
+      Timeout: 30
+      Environment:
+        Variables:
+          QueueUrl: !Ref Queue
+          BucketName: !Ref Bucket
+      Code:
+        ZipFile: |
+          import boto3
+          import os
+          import urllib.request
+
+          def handler(event, context):
+              queue_url = os.environ["QueueUrl"]
+              bucket = os.environ["BucketName"]
+              s3 = boto3.client("s3")
+              sqs = boto3.client("sqs")
+
+              listed = s3.list_objects_v2(Bucket=bucket, MaxKeys=100)
+              print(
+                  "list_objects_v2: KeyCount=%s"
+                  % listed.get("KeyCount", 0),
+              )
+
+              for record in event.get("Records", []):
+                  key = record["s3"]["object"]["key"]
+                  print(f"Found file in bucket: {key}")
+
+                  obj = s3.get_object(Bucket=bucket, Key=key)
+                  body = obj["Body"].read(4096)
+                  print("get_object: read %s bytes from %s" % (len(body), key))
+
+                  with urllib.request.urlopen(
+                      "https://httpbin.org/get", timeout=10
+                  ) as r:
+                      r.read(256)
+
+                  sqs.send_message(QueueUrl=queue_url, MessageBody=key)
+
+              return {"statusCode": 200}
+
+  S3InvokePermission:
+    Type: AWS::Lambda::Permission
+    DependsOn: ProducerLambda
+    Properties:
+      FunctionName: !Ref ProducerLambda
+      Action: lambda:InvokeFunction
+      Principal: s3.amazonaws.com
+      SourceArn: !Sub
+        - "arn:aws:s3:::${Bucket}"
+        - { Bucket: !Ref Bucket }
+
+  ConsumerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+
+  ConsumerRolePolicy:
+    Type: AWS::IAM::Policy
+    DependsOn: ConsumerRole
+    Properties:
+      PolicyName: ConsumerPolicy
+      Roles:
+        - !Ref ConsumerRole
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - sqs:ReceiveMessage
+              - sqs:DeleteMessage
+              - sqs:GetQueueAttributes
+            Resource: !GetAtt Queue.Arn
+          - Effect: Allow
+            Action:
+              - s3:GetObject
+            Resource: !Sub "${Bucket.Arn}/*"
+
+  ConsumerLambda:
+    Type: AWS::Lambda::Function
+    DependsOn: ConsumerRolePolicy
+    Properties:
+      FunctionName: !Sub "${StackNamePrefix}-consumer"
+      Runtime: python3.12
+      Handler: index.handler
+      Role: !GetAtt ConsumerRole.Arn
+      Timeout: 30
+      Environment:
+        Variables:
+          BucketName: !Ref Bucket
+      Code:
+        ZipFile: |
+          import boto3
+          import os
+          import urllib.request
+
+          def handler(event, context):
+              bucket = os.environ["BucketName"]
+              s3 = boto3.client("s3")
+
+              for record in event.get("Records", []):
+                  key = record["body"]
+                  print("Processing file from queue: %s" % key)
+
+                  obj = s3.get_object(Bucket=bucket, Key=key)
+                  content = obj["Body"].read(4096)
+                  print(
+                      "get_object: read %s bytes from %s"
+                      % (len(content), key),
+                  )
+
+                  with urllib.request.urlopen(
+                      "https://httpbin.org/get", timeout=10
+                  ) as r:
+                      r.read(256)
+
+              return {"statusCode": 200}
+
+  ConsumerEventSourceMapping:
+    Type: AWS::Lambda::EventSourceMapping
+    DependsOn: ConsumerLambda
+    Properties:
+      EventSourceArn: !GetAtt Queue.Arn
+      FunctionName: !Ref ConsumerLambda
+      BatchSize: 1
+
+Outputs:
+  BucketName:
+    Description: S3 bucket name
+    Value: !Ref Bucket
+    Export:
+      Name: !Sub "${AWS::StackName}-BucketName"
+  QueueUrl:
+    Description: SQS queue URL
+    Value: !Ref Queue
+    Export:
+      Name: !Sub "${AWS::StackName}-QueueUrl"
+  ProducerFunctionArn:
+    Description: Producer Lambda function ARN (for S3 notification)
+    Value: !GetAtt ProducerLambda.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-ProducerFunctionArn"
+  ProducerFunctionName:
+    Description: Producer Lambda function name
+    Value: !Ref ProducerLambda
+  ConsumerFunctionName:
+    Description: Consumer Lambda function name
+    Value: !Ref ConsumerLambda
