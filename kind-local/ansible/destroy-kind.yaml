@@ -1,0 +1,17 @@
+---
+- name: Destroy kind local lab cluster
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    kind_cluster_name: "cx-labs-kind-local"
+  tasks:
+    - name: List existing kind clusters
+      ansible.builtin.command: kind get clusters
+      register: kind_clusters
+      changed_when: false
+      failed_when: false
+
+    - name: Delete kind cluster if present
+      ansible.builtin.command: kind delete cluster --name {{ kind_cluster_name }}
+      when: kind_cluster_name in kind_clusters.stdout_lines

@@ -1,0 +1,13 @@
+global:
+  domain: ${cx_domain}
+  clusterName: ${cluster_name}
+  deploymentEnvironmentName: ${cluster_name}
+
+
+%{ if enable_gateway }
+opentelemetry-gateway:
+  enabled: true
+%{ else }
+opentelemetry-gateway:
+  enabled: false
+%{ endif }

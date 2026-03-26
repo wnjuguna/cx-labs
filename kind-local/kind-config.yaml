@@ -1,0 +1,7 @@
+# Reference only: `make cluster` renders ansible/templates/kind-config.yaml.j2 into .cache/kind-config.rendered.yaml
+# (with hostPath for kind-local/logs) and passes that to `kind create cluster`.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: cx-labs-kind-local
+nodes:
+  - role: control-plane

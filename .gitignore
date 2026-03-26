@@ -10,5 +10,7 @@
 **/*.bak
 **/inventory.ini
 postgres/tracey-reloaded
+kind-local/.cache/
+kind-local/logs/*.log
 */*values.yaml
 */*cm.yaml
